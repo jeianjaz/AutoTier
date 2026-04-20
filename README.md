@@ -7,6 +7,18 @@
 
 ---
 
+## Architecture
+
+![AutoTier Architecture](./docs/autotier-architecture.png)
+
+*Red paths trace the self-healing flow: a CloudWatch alarm fires on an
+unhealthy host, publishes to SNS, and invokes a Lambda that terminates the
+failed instance — the Auto Scaling Group then replaces it, spreading across
+AZs as needed. Normal request flow (black) is kept visually quiet so the
+recovery path dominates.*
+
+---
+
 ## Why this project exists
 
 Most tutorials teach you how to *deploy* infrastructure. Few teach you what
