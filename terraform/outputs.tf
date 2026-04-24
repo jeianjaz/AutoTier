@@ -1,0 +1,81 @@
+###############################################################################
+# outputs.tf
+#
+# The public API of this Terraform stack. Anything not listed here is
+# considered an internal implementation detail that might change without
+# breaking downstream code.
+#
+# Convention: outputs are snake_case, their `description` fields are
+# human-readable sentences, and lists are plural ("subnet_ids" not
+# "subnet_id"). These are tiny habits that compound in a large codebase.
+###############################################################################
+
+# --- VPC ---------------------------------------------------------------------
+
+output "vpc_id" {
+  description = "ID of the main VPC. Consumed by every downstream module (SGs, RDS, EC2)."
+  value       = aws_vpc.main.id
+}
+
+output "vpc_cidr_block" {
+  description = "CIDR of the main VPC. Useful for building security-group rules that allow 'anything in the VPC'."
+  value       = aws_vpc.main.cidr_block
+}
+
+# --- SUBNETS -----------------------------------------------------------------
+#
+# We expose the subnet IDs as lists (one per AZ). Downstream resources like
+# the ALB or RDS subnet group need multiple subnets, so a list is the
+# natural shape.
+
+output "public_subnet_ids" {
+  description = "Public-tier subnet IDs across AZs. ALB uses these; NAT lives in the first one."
+  value       = aws_subnet.public[*].id
+}
+
+output "app_subnet_ids" {
+  description = "App-tier (private) subnet IDs. The EC2 Auto Scaling Group launches instances here."
+  value       = aws_subnet.app[*].id
+}
+
+output "data_subnet_ids" {
+  description = "Data-tier (private, no egress) subnet IDs. RDS subnet group is built from these."
+  value       = aws_subnet.data[*].id
+}
+
+# --- GATEWAYS ----------------------------------------------------------------
+
+output "internet_gateway_id" {
+  description = "ID of the VPC's Internet Gateway."
+  value       = aws_internet_gateway.main.id
+}
+
+output "nat_gateway_id" {
+  description = "ID of the single NAT Gateway in AZ-1a. Only referenced by the app-tier route table today, but exposed for future observability (e.g., a CloudWatch alarm on NAT port-allocation errors)."
+  value       = aws_nat_gateway.main.id
+}
+
+output "nat_gateway_public_ip" {
+  description = "Static public IP the NAT uses as the source for outbound traffic. Useful to whitelist in third-party APIs (e.g., 'AutoTier's app instances appear as this IP to the outside world')."
+  value       = aws_eip.nat.public_ip
+}
+
+# --- ROUTE TABLES ------------------------------------------------------------
+#
+# Not strictly required today, but cheap to expose -- future modules (VPC
+# endpoints, peering connections) attach routes to these.
+
+output "public_route_table_id" {
+  description = "ID of the public route table (0.0.0.0/0 -> IGW)."
+  value       = aws_route_table.public.id
+}
+
+output "app_route_table_id" {
+  description = "ID of the app-tier route table (0.0.0.0/0 -> NAT)."
+  value       = aws_route_table.app.id
+}
+
+output "data_route_table_id" {
+  description = "ID of the data-tier route table (no egress; local VPC traffic only)."
+  value       = aws_route_table.data.id
+}
