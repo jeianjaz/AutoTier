@@ -59,9 +59,9 @@ rationale behind each design choice as it is made.
 
 | Step | Status |
 |------|--------|
-| 0  — Repo scaffold, ADR-001 design             | 🟢 In progress |
-| 1  — VPC + networking                          | ⏳ |
-| 2  — Security groups                           | ⏳ |
+| 0  — Repo scaffold, ADR-001 design             | 🟢 DONE |
+| 1  — VPC + networking                          | 🟢 DONE |
+| 2  — Security groups                           | ⏳ IN PROGRESS |
 | 3  — RDS data tier                             | ⏳ |
 | 4  — EC2 + user data                           | ⏳ |
 | 5  — ALB + Auto Scaling Group                  | ⏳ |
