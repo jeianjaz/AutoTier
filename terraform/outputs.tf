@@ -79,3 +79,23 @@ output "data_route_table_id" {
   description = "ID of the data-tier route table (no egress; local VPC traffic only)."
   value       = aws_route_table.data.id
 }
+
+# --- SECURITY GROUPS ----------------------------------------------------------
+#
+# Exposed so downstream resources (ALB, ASG launch template, RDS) can attach
+# the right SG without reaching into security_groups.tf internals.
+
+output "alb_security_group_id" {
+  description = "SG to attach to the Application Load Balancer."
+  value       = aws_security_group.alb.id
+}
+
+output "app_security_group_id" {
+  description = "SG to attach to EC2 instances launched by the Auto Scaling Group."
+  value       = aws_security_group.app.id
+}
+
+output "rds_security_group_id" {
+  description = "SG to attach to the RDS DB instance."
+  value       = aws_security_group.rds.id
+}
