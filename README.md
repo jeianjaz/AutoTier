@@ -61,8 +61,8 @@ rationale behind each design choice as it is made.
 |------|--------|
 | 0  — Repo scaffold, ADR-001 design             | 🟢 DONE |
 | 1  — VPC + networking                          | 🟢 DONE |
-| 2  — Security groups                           | ⏳ IN PROGRESS |
-| 3  — RDS data tier                             | ⏳ |
+| 2  — Security groups                           | 🟢 DONE |
+| 3  — RDS data tier                             | ⏳ IN PROGRESS|
 | 4  — EC2 + user data                           | ⏳ |
 | 5  — ALB + Auto Scaling Group                  | ⏳ |
 | 6  — CloudWatch + SNS alarms                   | ⏳ |
