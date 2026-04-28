@@ -45,3 +45,34 @@ variable "availability_zones" {
   type        = list(string)
   default     = ["ap-southeast-1a", "ap-southeast-1b"]
 }
+
+# -----------------------------------------------------------------------------
+# Database inputs. These are declared as variables (not hard-coded) so the
+# same Terraform can spin up "dev" (db.t3.micro, single-AZ) vs "prod"
+# (db.t3.small, multi-AZ) just by changing a tfvars file. Defaults are the
+# Multi-AZ dev values from ADR-002.
+# -----------------------------------------------------------------------------
+
+variable "db_engine_version" {
+  description = "MySQL engine version. AWS auto-applies minor patches within the major line."
+  type        = string
+  default     = "8.0"
+}
+
+variable "db_instance_class" {
+  description = "RDS instance class. db.t3.micro is the smallest that supports Multi-AZ and stays near free-tier."
+  type        = string
+  default     = "db.t3.micro"
+}
+
+variable "db_name" {
+  description = "Initial MySQL database (schema) to create inside the instance."
+  type        = string
+  default     = "autotier"
+}
+
+variable "db_username" {
+  description = "Master username for the RDS instance. Password is generated at apply time and stored in Secrets Manager -- never configured here."
+  type        = string
+  default     = "autotier_admin"
+}

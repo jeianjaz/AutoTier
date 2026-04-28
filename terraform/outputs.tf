@@ -99,3 +99,32 @@ output "rds_security_group_id" {
   description = "SG to attach to the RDS DB instance."
   value       = aws_security_group.rds.id
 }
+
+# --- DATABASE ----------------------------------------------------------------
+#
+# The EC2 app in Step 4 will consume `db_endpoint` (to connect) and
+# `db_secret_arn` (to fetch the password via Secrets Manager + IAM role).
+
+output "db_endpoint" {
+  description = "RDS DNS endpoint the app connects to. Resolves to the current primary; automatically updated by AWS during failover."
+  value       = aws_db_instance.main.address
+}
+
+output "db_port" {
+  description = "Port MySQL listens on inside the RDS instance."
+  value       = aws_db_instance.main.port
+}
+
+output "db_name" {
+  description = "Initial schema name created inside the MySQL instance."
+  value       = aws_db_instance.main.db_name
+}
+
+output "db_secret_arn" {
+  description = "ARN of the Secrets Manager secret holding master username + password. Used by the EC2 IAM policy in Step 4."
+  value       = aws_secretsmanager_secret.db_master.arn
+}
+
+# db_master_password is intentionally NOT output -- even marked `sensitive`,
+# outputs are still readable via `terraform output -raw` and visible in CI
+# logs. Passwords ONLY leave the state file via Secrets Manager GetSecretValue.

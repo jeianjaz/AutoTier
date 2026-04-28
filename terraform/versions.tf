@@ -19,5 +19,11 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.60"
     }
+    # Used by rds.tf to generate a strong DB password at apply time that is
+    # never written to code, never passed via CLI, and stored in Secrets Manager.
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 }
