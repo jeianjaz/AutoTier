@@ -128,3 +128,25 @@ output "db_secret_arn" {
 # db_master_password is intentionally NOT output -- even marked `sensitive`,
 # outputs are still readable via `terraform output -raw` and visible in CI
 # logs. Passwords ONLY leave the state file via Secrets Manager GetSecretValue.
+
+# --- EC2 APP -----------------------------------------------------------------
+
+output "app_instance_id" {
+  description = "Instance ID of the app tier EC2. Use with SSM: `aws ssm start-session --target <this>`."
+  value       = aws_instance.app.id
+}
+
+output "app_private_ip" {
+  description = "Private IP of the app instance. No public IP exists by design."
+  value       = aws_instance.app.private_ip
+}
+
+output "ssm_session_command" {
+  description = "Copy-paste command to open a shell on the app instance via SSM Session Manager. No SSH keys, no port 22."
+  value       = "aws ssm start-session --region ${var.aws_region} --target ${aws_instance.app.id}"
+}
+
+output "app_curl_command" {
+  description = "From INSIDE the SSM session, run this to hit the app's health endpoint locally."
+  value       = "curl -s http://localhost:8080/health && echo"
+}
