@@ -76,3 +76,13 @@ variable "db_username" {
   type        = string
   default     = "autotier_admin"
 }
+
+# -----------------------------------------------------------------------------
+# EC2 / app tier inputs
+# -----------------------------------------------------------------------------
+
+variable "ec2_instance_type" {
+  description = "Instance class for the app tier. t3.micro is the free-tier-eligible x86_64 class and enough for a Flask demo."
+  type        = string
+  default     = "t3.micro"
+}

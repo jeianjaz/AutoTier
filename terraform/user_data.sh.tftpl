@@ -1,0 +1,208 @@
+#!/bin/bash
+###############################################################################
+# user_data.sh.tftpl
+#
+# Cloud-init boot script for AutoTier app instances.
+#
+# This is a Terraform TEMPLATE file (.tftpl). Variables in the form
+# $${var_name} are substituted by templatefile() in ec2.tf at apply time.
+# (The double dollar $${} is needed because a single $ would also match
+# shell variables at runtime -- double escapes it for Terraform's
+# template engine.)
+#
+# What this script does, in order:
+#   1. Patches the base AMI (yum update).
+#   2. Installs Python 3, pip, and tools we need.
+#   3. Writes a small Flask app to /opt/autotier/app.py.
+#   4. Writes a systemd unit so the app starts on boot + restarts on crash.
+#   5. Starts the service.
+#
+# At no point does this script contain a password. The app fetches the
+# DB password at RUNTIME from Secrets Manager using the instance's IAM
+# role (created in iam.tf).
+###############################################################################
+
+set -euxo pipefail
+exec > >(tee -a /var/log/autotier-userdata.log) 2>&1
+
+echo "[autotier] user-data starting at $(date -Is)"
+
+# -----------------------------------------------------------------------------
+# 1. System packages
+# -----------------------------------------------------------------------------
+dnf update -y
+dnf install -y python3 python3-pip jq
+
+# Pin Python packages so builds are reproducible. pymysql is a pure-Python
+# MySQL driver -- no native compilation needed on the instance.
+pip3 install --quiet \
+  "flask==3.0.3" \
+  "pymysql==1.1.1" \
+  "boto3==1.34.162"
+
+# -----------------------------------------------------------------------------
+# 2. App code
+# -----------------------------------------------------------------------------
+mkdir -p /opt/autotier
+
+cat > /opt/autotier/app.py <<'PYEOF'
+"""
+AutoTier app -- tiny Flask service that proves the full stack works:
+
+  GET /health  -> 200 OK JSON. Used by the ALB target group health check.
+  GET /        -> HTML page showing this instance's hostname + AZ + the
+                  current timestamp FROM the MySQL database. When RDS
+                  fails over, this page will briefly error, then recover
+                  once AWS promotes the standby -- the basis for the
+                  chaos-test MTTR measurement in Step 8.
+
+Design notes:
+- We resolve the DB password at startup AND cache it. On connection
+  errors we refetch, in case the secret was rotated.
+- We open a new DB connection per request. Not efficient, but it makes
+  failover behaviour unambiguous to watch: one request fails, the next
+  succeeds once AWS has promoted the standby.
+"""
+
+import json
+import os
+import socket
+import urllib.request
+
+import boto3
+import pymysql
+from flask import Flask, jsonify
+
+APP = Flask(__name__)
+
+DB_HOST = os.environ["DB_HOST"]
+DB_NAME = os.environ["DB_NAME"]
+DB_SECRET_ARN = os.environ["DB_SECRET_ARN"]
+AWS_REGION = os.environ["AWS_REGION"]
+
+_sm_client = boto3.client("secretsmanager", region_name=AWS_REGION)
+_creds_cache = None
+
+
+def get_db_creds():
+    """Fetch {username, password} from Secrets Manager. Cached."""
+    global _creds_cache
+    if _creds_cache is None:
+        resp = _sm_client.get_secret_value(SecretId=DB_SECRET_ARN)
+        _creds_cache = json.loads(resp["SecretString"])
+    return _creds_cache
+
+
+def db_connect():
+    creds = get_db_creds()
+    return pymysql.connect(
+        host=DB_HOST,
+        user=creds["username"],
+        password=creds["password"],
+        database=DB_NAME,
+        connect_timeout=4,
+        read_timeout=4,
+        write_timeout=4,
+    )
+
+
+def instance_az():
+    """Query IMDSv2 for the AZ this EC2 is in. Used only for display."""
+    try:
+        token_req = urllib.request.Request(
+            "http://169.254.169.254/latest/api/token",
+            method="PUT",
+            headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"},
+        )
+        token = urllib.request.urlopen(token_req, timeout=1).read().decode()
+        az_req = urllib.request.Request(
+            "http://169.254.169.254/latest/meta-data/placement/availability-zone",
+            headers={"X-aws-ec2-metadata-token": token},
+        )
+        return urllib.request.urlopen(az_req, timeout=1).read().decode()
+    except Exception:
+        return "unknown"
+
+
+@APP.route("/health")
+def health():
+    # Deliberately does NOT touch the DB. The ALB needs to keep routing
+    # traffic to this instance even during a brief DB failover so the
+    # user gets a 503 body, not a 5xx from the ALB itself. The DB health
+    # is a separate CloudWatch check.
+    return jsonify(status="ok", host=socket.gethostname()), 200
+
+
+@APP.route("/")
+def index():
+    host = socket.gethostname()
+    az = instance_az()
+    try:
+        conn = db_connect()
+        with conn.cursor() as cur:
+            cur.execute("SELECT NOW(), VERSION()")
+            now, version = cur.fetchone()
+        conn.close()
+        db_block = (
+            f"<p><b>DB OK</b> -- server time: {now}, engine: {version}</p>"
+        )
+        status_code = 200
+    except Exception as exc:
+        # Force the creds to refresh next request in case of rotation.
+        global _creds_cache
+        _creds_cache = None
+        db_block = f"<p><b>DB ERROR</b>: {type(exc).__name__}: {exc}</p>"
+        status_code = 503
+
+    html = f"""<!doctype html>
+<html><head><title>AutoTier</title>
+<style>body{{font-family:system-ui;margin:2em;max-width:60ch}}</style>
+</head><body>
+<h1>AutoTier</h1>
+<p>Served by <code>{host}</code> in <code>{az}</code>.</p>
+{db_block}
+</body></html>
+"""
+    return html, status_code, {"Content-Type": "text/html"}
+
+
+if __name__ == "__main__":
+    APP.run(host="0.0.0.0", port=8080)
+PYEOF
+
+# -----------------------------------------------------------------------------
+# 3. Systemd unit
+# -----------------------------------------------------------------------------
+# Environment variables are set HERE at unit creation. The app never sees
+# DB_SECRET_ARN etc. as template params -- systemd passes them via the
+# process environment, the app calls os.environ, and that's cleaner than
+# baking them into the Python file.
+
+cat > /etc/systemd/system/autotier.service <<EOF
+[Unit]
+Description=AutoTier Flask app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment="DB_HOST=${db_host}"
+Environment="DB_NAME=${db_name}"
+Environment="DB_SECRET_ARN=${db_secret_arn}"
+Environment="AWS_REGION=${aws_region}"
+ExecStart=/usr/bin/python3 /opt/autotier/app.py
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# -----------------------------------------------------------------------------
+# 4. Enable + start
+# -----------------------------------------------------------------------------
+systemctl daemon-reload
+systemctl enable --now autotier.service
+
+echo "[autotier] user-data finished at $(date -Is)"
