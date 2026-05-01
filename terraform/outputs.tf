@@ -129,37 +129,24 @@ output "db_secret_arn" {
 # outputs are still readable via `terraform output -raw` and visible in CI
 # logs. Passwords ONLY leave the state file via Secrets Manager GetSecretValue.
 
-# --- ALB + ASG ---------------------------------------------------------------
-#
-# The single aws_instance from Step 4 is gone -- replaced by the ASG. To SSM
-# into one of the ASG instances, list them by tag and pick any:
-#   aws ec2 describe-instances --region <region> \
-#     --filters Name=tag:aws:autoscaling:groupName,Values=<asg_name> \
-#               Name=instance-state-name,Values=running \
-#     --query 'Reservations[].Instances[].InstanceId' --output text
-# Then: aws ssm start-session --target <id>
+# --- EC2 APP -----------------------------------------------------------------
 
-output "alb_dns_name" {
-  description = "Public DNS name of the ALB. Open this in a browser or curl it -- it routes to whatever ASG instance is healthy."
-  value       = aws_lb.main.dns_name
+output "app_instance_id" {
+  description = "Instance ID of the app tier EC2. Use with SSM: `aws ssm start-session --target <this>`."
+  value       = aws_instance.app.id
 }
 
-output "alb_url" {
-  description = "Full HTTP URL to hit the app. Refresh repeatedly to see different backend instances/AZs."
-  value       = "http://${aws_lb.main.dns_name}"
+output "app_private_ip" {
+  description = "Private IP of the app instance. No public IP exists by design."
+  value       = aws_instance.app.private_ip
 }
 
-output "alb_zone_id" {
-  description = "Hosted zone ID of the ALB. Used as alias target in Route 53 if/when a custom domain is added."
-  value       = aws_lb.main.zone_id
+output "ssm_session_command" {
+  description = "Copy-paste command to open a shell on the app instance via SSM Session Manager. No SSH keys, no port 22."
+  value       = "aws ssm start-session --region ${var.aws_region} --target ${aws_instance.app.id}"
 }
 
-output "target_group_arn" {
-  description = "ARN of the app target group. The chaos test (Step 8) uses this to query target health."
-  value       = aws_lb_target_group.app.arn
-}
-
-output "asg_name" {
-  description = "Name of the Auto Scaling Group. Used by the chaos test and by SSM target discovery."
-  value       = aws_autoscaling_group.app.name
+output "app_curl_command" {
+  description = "From INSIDE the SSM session, run this to hit the app's health endpoint locally."
+  value       = "curl -s http://localhost:8080/health && echo"
 }
