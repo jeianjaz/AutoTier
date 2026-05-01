@@ -86,3 +86,27 @@ variable "ec2_instance_type" {
   type        = string
   default     = "t3.micro"
 }
+
+# -----------------------------------------------------------------------------
+# Auto Scaling Group sizing
+# -----------------------------------------------------------------------------
+# Min = Desired = 2 to keep one instance per AZ for HA. Max = 4 leaves room
+# for a future scale-out policy (Step 6) without a code change.
+
+variable "asg_min_size" {
+  description = "Minimum number of app instances. 2 = one per AZ for HA."
+  type        = number
+  default     = 2
+}
+
+variable "asg_desired_capacity" {
+  description = "Steady-state number of app instances. Equal to min for now (no scaling policy)."
+  type        = number
+  default     = 2
+}
+
+variable "asg_max_size" {
+  description = "Cap on app instances during scale-out. Acts as a cost guardrail."
+  type        = number
+  default     = 4
+}
