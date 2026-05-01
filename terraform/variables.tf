@@ -110,3 +110,20 @@ variable "asg_max_size" {
   type        = number
   default     = 4
 }
+
+# -----------------------------------------------------------------------------
+# Observability (Step 6)
+# -----------------------------------------------------------------------------
+# Email destination for SNS alarm notifications. Intentionally has NO default
+# so a real email never lives in the repo. Pass it via terraform.tfvars
+# (which is .gitignored) or `-var alert_email=...` on the CLI.
+
+variable "alert_email" {
+  description = "Email address that receives CloudWatch alarm notifications via SNS. Must be confirmed via the link AWS emails right after apply."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.alert_email))
+    error_message = "alert_email must look like a valid email address (e.g. you@example.com)."
+  }
+}

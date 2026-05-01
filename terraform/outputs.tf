@@ -163,3 +163,15 @@ output "asg_name" {
   description = "Name of the Auto Scaling Group. Used by the chaos test and by SSM target discovery."
   value       = aws_autoscaling_group.app.name
 }
+
+# --- OBSERVABILITY (Step 6) --------------------------------------------------
+
+output "sns_topic_arn" {
+  description = "ARN of the alerts SNS topic. Step 7 Lambda will subscribe to this."
+  value       = aws_sns_topic.alerts.arn
+}
+
+output "alarm_test_command" {
+  description = "Copy-paste to manually flip the headline alarm to ALARM and prove the SNS pipeline end-to-end."
+  value       = "aws cloudwatch set-alarm-state --region ${var.aws_region} --alarm-name ${aws_cloudwatch_metric_alarm.alb_unhealthy_hosts.alarm_name} --state-value ALARM --state-reason 'manual SNS pipeline test'"
+}
