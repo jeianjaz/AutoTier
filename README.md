@@ -54,46 +54,54 @@ automatically** — and the recovery time is *measured*, not assumed.
 
 ## Project status
 
-🚧 **In progress.** See [`docs/decisions/`](./docs/decisions/) for the
-rationale behind each design choice as it is made.
+🚧 **In progress — 7/11 steps complete (64%).**
+See [`docs/decisions/`](./docs/decisions/) for the rationale behind each
+design choice as it is made.
 
-| Step | Status |
-|------|--------|
-| 0  — Repo scaffold, ADR-001 design             | 🟢 DONE |
-| 1  — VPC + networking                          | 🟢 DONE |
-| 2  — Security groups                           | 🟢 DONE |
-| 3  — RDS data tier                             | ⏳ IN PROGRESS|
-| 4  — EC2 + user data                           | ⏳ |
-| 5  — ALB + Auto Scaling Group                  | ⏳ |
-| 6  — CloudWatch + SNS alarms                   | ⏳ |
-| 7  — Lambda auto-recovery                      | ⏳ |
-| 8  — Chaos testing + MTTR measurement          | ⏳ |
-| 9  — Python automation scripts                 | ⏳ |
-| 10 — CI/CD + Checkov + branch protection       | ⏳ |
-| 11 — Runbook + architecture doc                | ⏳ |
+| Step | Status | Highlights |
+|------|--------|------------|
+| 0  — Repo scaffold, ADR-001 design             | 🟢 DONE | Three-tier Multi-AZ design accepted |
+| 1  — VPC + networking                          | 🟢 DONE | 1 VPC / 6 subnets / IGW / NAT / 3 route tables |
+| 2  — Security groups                           | 🟢 DONE | ALB → App → RDS chain via SG references |
+| 3  — RDS data tier                             | 🟢 DONE | MySQL 8.0 Multi-AZ, password in Secrets Manager |
+| 4  — EC2 + user data                           | 🟢 DONE | Flask app + IAM + SSM, DB OK verified end-to-end |
+| 5  — ALB + Auto Scaling Group                  | 🟢 DONE | Public ALB + 2-instance ASG across AZs, ELB health checks |
+| 6  — CloudWatch + SNS alarms                   | 🟢 DONE | 5 alarms (ALB, ASG CPU, RDS CPU/conn/storage) + email alerts |
+| 7  — Lambda auto-remediation                   | 🟢 DONE | SNS → Lambda terminates unhealthy targets, ASG replaces |
+| 8  — Chaos testing + MTTR measurement          | ⏳ NEXT | Flagship deliverable |
+| 9  — Helper scripts                            | ⏳ | |
+| 10 — CI/CD + Checkov + branch protection       | ⏳ | |
+| 11 — Runbook + production framing + README      | ⏳ | |
 
 ## Architecture Decisions
 
 | ADR | Decision |
 |-----|----------|
 | [001](./docs/decisions/001-three-tier-multi-az.md) | Three-tier architecture with Multi-AZ |
-| 002 *(pending)* | RDS MySQL over DynamoDB for application data |
-| 003 *(pending)* | Auto Scaling Group over EC2 Auto Recovery |
-| 004 *(pending)* | Lambda-based remediation via SNS |
+| [002](./docs/decisions/002-rds-mysql-multi-az.md) | RDS MySQL Multi-AZ over Aurora and Single-AZ |
+| [003](./docs/decisions/003-asg-over-auto-recovery.md) | Auto Scaling Group over EC2 Auto Recovery |
+| [004](./docs/decisions/004-cloudwatch-sns-over-third-party.md) | CloudWatch + SNS over Datadog / Prometheus |
+| [005](./docs/decisions/005-lambda-sns-over-ssm-run-command.md) | Lambda SNS subscriber over SSM Run Command |
 
 ## Running locally
 
-Prerequisites: AWS credentials (IAM user, not root), Terraform ≥ 1.6, Python ≥ 3.11.
+**Prerequisites:** AWS credentials (IAM user, not root), Terraform ≥ 1.6, Python ≥ 3.11.
 
 ```bash
+# Create terraform.tfvars (gitignored) with your email for alarm notifications
+echo 'alert_email = "you@example.com"' > terraform/terraform.tfvars
+
 make plan      # terraform plan
-make up        # terraform apply
+make up        # terraform apply (~12 min, RDS is the long pole)
 make down      # terraform destroy (ALWAYS run after a work session)
 ```
 
+After `make up`, confirm the SNS email subscription (check your inbox) to
+receive alarm notifications.
+
 ## Cost discipline
 
-NAT Gateway and ALB are the primary cost drivers (~$1.70/day when up).
+NAT Gateway, ALB, and RDS are the primary cost drivers (~$2/day when up).
 This project is **designed to be destroyed between work sessions**.
 `make down` is a reflex, not an afterthought.
 
