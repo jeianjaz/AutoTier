@@ -117,3 +117,106 @@ resource "aws_iam_instance_profile" "app" {
     Name = "${local.name_prefix}-app-profile"
   }
 }
+
+
+###############################################################################
+# LAMBDA REMEDIATION ROLE (Step 7)
+###############################################################################
+#
+# Separate role from the EC2 one — different trust policy (lambda.amazonaws.com
+# vs ec2.amazonaws.com) and different permissions. Combining them into one role
+# would violate least privilege: the EC2 instances don't need autoscaling
+# termination powers, and the Lambda doesn't need to read secrets.
+###############################################################################
+
+
+# =============================================================================
+# TRUST POLICY -- only Lambda can assume this role
+# =============================================================================
+
+data "aws_iam_policy_document" "lambda_trust" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+
+# =============================================================================
+# THE ROLE
+# =============================================================================
+
+resource "aws_iam_role" "lambda_remediation" {
+  name               = "${local.name_prefix}-lambda-remediation-role"
+  description        = "Role for the auto-remediation Lambda. Can query target health and terminate ASG instances."
+  assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
+
+  tags = {
+    Name = "${local.name_prefix}-lambda-remediation-role"
+  }
+}
+
+
+# =============================================================================
+# PERMISSION: describe target health + terminate unhealthy instances
+# =============================================================================
+#
+# Three permissions, each scoped as tightly as possible:
+#
+#   1. DescribeTargetHealth — scoped to the app target group ARN.
+#   2. DescribeAutoScalingInstances — scoped to "*" because the API does not
+#      accept a resource ARN (AWS limitation). Mitigated by the fact that this
+#      is a read-only call.
+#   3. TerminateInstanceInAutoScalingGroup — scoped to the ASG ARN. This is
+#      the critical one: without resource scoping, the Lambda could terminate
+#      instances in ANY ASG in the account.
+
+data "aws_iam_policy_document" "lambda_remediation" {
+  # Query which targets are unhealthy
+  # NOTE: DescribeTargetHealth does NOT support resource-level permissions
+  # in AWS IAM (it's a Describe* call). Resource must be "*".
+  statement {
+    sid       = "DescribeTargetHealth"
+    effect    = "Allow"
+    actions   = ["elasticloadbalancing:DescribeTargetHealth"]
+    resources = ["*"]
+  }
+
+  # Check if an instance belongs to an ASG (read-only, no resource scoping available)
+  statement {
+    sid       = "DescribeASGInstances"
+    effect    = "Allow"
+    actions   = ["autoscaling:DescribeAutoScalingInstances"]
+    resources = ["*"]
+  }
+
+  # Terminate the unhealthy instance via the ASG API
+  statement {
+    sid       = "TerminateUnhealthyInstance"
+    effect    = "Allow"
+    actions   = ["autoscaling:TerminateInstanceInAutoScalingGroup"]
+    resources = [aws_autoscaling_group.app.arn]
+  }
+
+  # Write logs to CloudWatch (the log group is pre-created in lambda.tf)
+  statement {
+    sid    = "WriteLogs"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents",
+    ]
+    resources = ["${aws_cloudwatch_log_group.remediation.arn}:*"]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_remediation" {
+  name   = "${local.name_prefix}-lambda-remediation-policy"
+  role   = aws_iam_role.lambda_remediation.id
+  policy = data.aws_iam_policy_document.lambda_remediation.json
+}
