@@ -8,9 +8,10 @@ Format: [Michael Nygard's ADR template](https://github.com/joelparkerhenderson/a
 | ID | Title | Status |
 |----|-------|--------|
 | [001](./001-three-tier-multi-az.md) | Three-tier architecture with Multi-AZ | Accepted |
-| 002 | RDS MySQL over DynamoDB for application data | Pending (Step 3) |
-| 003 | Auto Scaling Group over EC2 Auto Recovery | Pending (Step 5) |
-| 004 | Lambda-based remediation via SNS | Pending (Step 7) |
+| [002](./002-rds-mysql-multi-az.md) | RDS MySQL Multi-AZ + Free-Tier trade-offs | Accepted |
+| [003](./003-asg-over-auto-recovery.md) | Auto Scaling Group over EC2 Auto Recovery | Accepted |
+| [004](./004-cloudwatch-sns-over-third-party.md) | CloudWatch Alarms + SNS over Datadog / Prometheus | Accepted |
+| [005](./005-lambda-sns-over-ssm-run-command.md) | Lambda SNS subscriber over SSM Run Command | Accepted |
 
 ## Adding a new ADR
 

@@ -175,3 +175,15 @@ output "alarm_test_command" {
   description = "Copy-paste to manually flip the headline alarm to ALARM and prove the SNS pipeline end-to-end."
   value       = "aws cloudwatch set-alarm-state --region ${var.aws_region} --alarm-name ${aws_cloudwatch_metric_alarm.alb_unhealthy_hosts.alarm_name} --state-value ALARM --state-reason 'manual SNS pipeline test'"
 }
+
+# --- LAMBDA REMEDIATION (Step 7) ---------------------------------------------
+
+output "lambda_function_name" {
+  description = "Name of the auto-remediation Lambda. Check its logs: aws logs tail /aws/lambda/<this> --follow"
+  value       = aws_lambda_function.remediation.function_name
+}
+
+output "lambda_log_group" {
+  description = "CloudWatch log group for the remediation Lambda. 14-day retention."
+  value       = aws_cloudwatch_log_group.remediation.name
+}
