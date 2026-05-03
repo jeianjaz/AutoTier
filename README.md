@@ -33,12 +33,12 @@ automatically** — and the recovery time is *measured*, not assumed.
 
 | Layer | AWS Service | Purpose |
 |-------|-------------|---------|
-| Edge | Application Load Balancer (ALB) | TLS termination, health checks, request routing |
+| Edge | Application Load Balancer (ALB) | Health checks, request routing across AZs |
 | Web / App | EC2 + Auto Scaling Group (Multi-AZ) | Horizontally scalable stateless compute |
 | Data | RDS MySQL (Multi-AZ) | Relational storage with automated failover |
-| Observability | CloudWatch + SNS | Metric-based alerting on health / CPU / 5xx |
-| Remediation | Lambda (Python) | Auto-replaces unhealthy instances on alarm |
-| Chaos | `scripts/chaos_test.py` | Stops an EC2, measures Mean Time To Recovery |
+| Observability | CloudWatch + SNS | Metric-based alerting on health / CPU / storage |
+| Remediation | Lambda (Python) | Auto-terminates unhealthy instances on alarm |
+| Chaos | `scripts/chaos_test.py` | Kills an EC2, measures Mean Time To Recovery |
 
 ## Key characteristics
 
@@ -49,51 +49,130 @@ automatically** — and the recovery time is *measured*, not assumed.
   documented in [`docs/chaos-results.md`](./docs/chaos-results.md).
 - **IaC-first** — 100% Terraform, no click-ops. `terraform destroy` takes the
   environment to $0 cost.
+- **Least-privilege IAM** — every role is scoped to specific resource ARNs.
+  No `Action: "*"`, no `Resource: "*"`, no hardcoded credentials.
 - **Engineering-grade repo** — ADRs, incident runbook, feature-branch PRs,
   Checkov in CI, conventional commits.
 
+## Self-healing flow
+
+```
+Instance fails health check
+        ↓
+ALB marks target unhealthy
+        ↓
+CloudWatch alarm: UnHealthyHostCount ≥ 1
+        ↓
+SNS topic fans out to:
+  ├── Email → operator notified
+  └── Lambda → auto-remediation
+        ↓
+Lambda: DescribeTargetHealth → find sick instance
+        → TerminateInstanceInAutoScalingGroup (ShouldDecrementDesiredCapacity=False)
+        ↓
+ASG launches replacement → passes /health → alarm returns to OK
+```
+
 ## Project status
 
-🚧 **In progress.** See [`docs/decisions/`](./docs/decisions/) for the
-rationale behind each design choice as it is made.
+🚧 **In progress — 7/11 steps complete (64%).**
+See [`docs/decisions/`](./docs/decisions/) for the rationale behind each
+design choice as it is made.
 
-| Step | Status |
-|------|--------|
-| 0  — Repo scaffold, ADR-001 design             | 🟢 DONE |
-| 1  — VPC + networking                          | 🟢 DONE |
-| 2  — Security groups                           | 🟢 DONE |
-| 3  — RDS data tier                             | ⏳ IN PROGRESS|
-| 4  — EC2 + user data                           | ⏳ |
-| 5  — ALB + Auto Scaling Group                  | ⏳ |
-| 6  — CloudWatch + SNS alarms                   | ⏳ |
-| 7  — Lambda auto-recovery                      | ⏳ |
-| 8  — Chaos testing + MTTR measurement          | ⏳ |
-| 9  — Python automation scripts                 | ⏳ |
-| 10 — CI/CD + Checkov + branch protection       | ⏳ |
-| 11 — Runbook + architecture doc                | ⏳ |
+| Step | Status | Highlights |
+|------|--------|------------|
+| 0  — Repo scaffold, ADR-001 design             | 🟢 DONE | Three-tier Multi-AZ design accepted |
+| 1  — VPC + networking                          | 🟢 DONE | 1 VPC / 6 subnets / IGW / NAT / 3 route tables |
+| 2  — Security groups                           | 🟢 DONE | ALB → App → RDS chain via SG references |
+| 3  — RDS data tier                             | 🟢 DONE | MySQL 8.0 Multi-AZ, password in Secrets Manager |
+| 4  — EC2 + user data                           | 🟢 DONE | Flask app + IAM + SSM, DB OK verified end-to-end |
+| 5  — ALB + Auto Scaling Group                  | 🟢 DONE | Public ALB + 2-instance ASG across AZs, ELB health checks |
+| 6  — CloudWatch + SNS alarms                   | 🟢 DONE | 5 alarms (ALB, ASG CPU, RDS CPU/conn/storage) + email alerts |
+| 7  — Lambda auto-remediation                   | 🟢 DONE | SNS → Lambda terminates unhealthy targets, ASG replaces |
+| 8  — Chaos testing + MTTR measurement          | ⏳ NEXT | Flagship deliverable |
+| 9  — Helper scripts                            | ⏳ | |
+| 10 — CI/CD + Checkov + branch protection       | ⏳ | |
+| 11 — Runbook + production framing + README      | ⏳ | |
+
+### Verified working
+
+**ALB routing across AZs:**
+```
+$ curl http://<alb-dns>/health
+{"host":"ip-10-0-11-213.ap-southeast-1.compute.internal","status":"ok"}
+```
+
+**Self-healing pipeline (instance killed → auto-replaced):**
+```
+Lambda log:
+  Alarm 'autotier-dev-alb-unhealthy-hosts' is in ALARM state. Querying target health...
+  No unhealthy targets found in target group. The ASG or a prior invocation
+  may have already handled this.
+```
+
+The Lambda and the ASG's own ELB health check **race** to fix the problem.
+Whichever wins, the fleet recovers. The Lambda's idempotency ensures no
+double-termination. ALARM and OK email notifications confirmed end-to-end.
 
 ## Architecture Decisions
 
 | ADR | Decision |
 |-----|----------|
 | [001](./docs/decisions/001-three-tier-multi-az.md) | Three-tier architecture with Multi-AZ |
-| 002 *(pending)* | RDS MySQL over DynamoDB for application data |
-| 003 *(pending)* | Auto Scaling Group over EC2 Auto Recovery |
-| 004 *(pending)* | Lambda-based remediation via SNS |
+| [002](./docs/decisions/002-rds-mysql-multi-az.md) | RDS MySQL Multi-AZ over Aurora and Single-AZ |
+| [003](./docs/decisions/003-asg-over-auto-recovery.md) | Auto Scaling Group over EC2 Auto Recovery |
+| [004](./docs/decisions/004-cloudwatch-sns-over-third-party.md) | CloudWatch + SNS over Datadog / Prometheus |
+| [005](./docs/decisions/005-lambda-sns-over-ssm-run-command.md) | Lambda SNS subscriber over SSM Run Command |
+
+## Repo structure
+
+```
+project-2-autotier/
+├── docs/
+│   └── decisions/          # Architecture Decision Records (ADR-001 → 005)
+├── lambda/
+│   └── remediation/
+│       └── handler.py      # Auto-remediation Lambda (Python 3.12)
+├── terraform/
+│   ├── vpc.tf              # VPC + IGW
+│   ├── subnets.tf          # 6 subnets (2 public, 2 app, 2 data)
+│   ├── internet.tf         # NAT Gateway + EIP
+│   ├── routes.tf           # 3 route tables + associations
+│   ├── security_groups.tf  # ALB, App, RDS security groups
+│   ├── rds.tf              # RDS MySQL Multi-AZ + Secrets Manager
+│   ├── ec2.tf              # AMI data source
+│   ├── iam.tf              # EC2 role + Lambda remediation role
+│   ├── asg.tf              # Launch template + Auto Scaling Group
+│   ├── alb.tf              # ALB + target group + listener
+│   ├── cloudwatch.tf       # 5 CloudWatch metric alarms
+│   ├── sns.tf              # SNS topic + email subscription + policy
+│   ├── lambda.tf           # Lambda function + SNS trigger + log group
+│   ├── variables.tf        # All input variables with validation
+│   ├── outputs.tf          # Public API of the stack
+│   └── user_data.sh.tftpl  # Cloud-init: Flask + DB bootstrap
+├── Makefile                # make plan / up / down
+└── README.md
+```
 
 ## Running locally
 
-Prerequisites: AWS credentials (IAM user, not root), Terraform ≥ 1.6, Python ≥ 3.11.
+**Prerequisites:** AWS credentials (IAM user, not root), Terraform ≥ 1.6, Python ≥ 3.11.
 
 ```bash
+# Create terraform.tfvars (gitignored) with your email for alarm notifications
+echo 'alert_email = "you@example.com"' > terraform/terraform.tfvars
+
 make plan      # terraform plan
-make up        # terraform apply
+make up        # terraform apply (~12 min, RDS is the long pole)
 make down      # terraform destroy (ALWAYS run after a work session)
 ```
 
+After `make up`, confirm the SNS email subscription (check your inbox) to
+receive alarm notifications.
+
 ## Cost discipline
 
-NAT Gateway and ALB are the primary cost drivers (~$1.70/day when up).
+NAT Gateway, ALB, and RDS are the primary cost drivers (~$2/day when up).
 This project is **designed to be destroyed between work sessions**.
 `make down` is a reflex, not an afterthought.
 
