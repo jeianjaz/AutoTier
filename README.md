@@ -54,9 +54,9 @@ automatically** — and the recovery time is *measured*, not assumed.
 
 ## Project status
 
-🚧 **In progress — 7/11 steps complete (64%).**
+✅ **Complete — 11/11 steps done.**
 See [`docs/decisions/`](./docs/decisions/) for the rationale behind each
-design choice as it is made.
+design choice.
 
 | Step | Status | Highlights |
 |------|--------|------------|
@@ -68,10 +68,10 @@ design choice as it is made.
 | 5  — ALB + Auto Scaling Group                  | 🟢 DONE | Public ALB + 2-instance ASG across AZs, ELB health checks |
 | 6  — CloudWatch + SNS alarms                   | 🟢 DONE | 5 alarms (ALB, ASG CPU, RDS CPU/conn/storage) + email alerts |
 | 7  — Lambda auto-remediation                   | 🟢 DONE | SNS → Lambda terminates unhealthy targets, ASG replaces |
-| 8  — Chaos testing + MTTR measurement          | ⏳ NEXT | Flagship deliverable |
-| 9  — Helper scripts                            | ⏳ | |
-| 10 — CI/CD + Checkov + branch protection       | ⏳ | |
-| 11 — Runbook + production framing + README      | ⏳ | |
+| 8  — Chaos testing + MTTR measurement          | 🟢 DONE | **MTTR: 80s** — measured via `chaos_test.py` |
+| 9  — Helper scripts                            | 🟢 DONE | `status.py`, `logs.py`, `connect.py` (SSM) |
+| 10 — CI/CD + Checkov + branch protection       | 🟢 DONE | 3-job GitHub Actions pipeline, branch ruleset |
+| 11 — Runbook + production framing + README      | 🟢 DONE | Incident playbook, escalation path, polished docs |
 
 ## Architecture Decisions
 
@@ -82,6 +82,18 @@ design choice as it is made.
 | [003](./docs/decisions/003-asg-over-auto-recovery.md) | Auto Scaling Group over EC2 Auto Recovery |
 | [004](./docs/decisions/004-cloudwatch-sns-over-third-party.md) | CloudWatch + SNS over Datadog / Prometheus |
 | [005](./docs/decisions/005-lambda-sns-over-ssm-run-command.md) | Lambda SNS subscriber over SSM Run Command |
+| [006](./docs/decisions/006-ci-cd-checkov.md) | GitHub Actions CI with Checkov over manual reviews |
+
+## Operational Commands
+
+```bash
+make status    # Health dashboard: ASG + ALB targets + alarm states
+make logs      # View Lambda remediation activity
+make connect   # SSM into an ASG instance (no SSH, no keys)
+make chaos     # Run chaos test — measures MTTR (destructive)
+```
+
+See [`docs/runbook.md`](./docs/runbook.md) for the full incident response playbook.
 
 ## Running locally
 
