@@ -12,6 +12,7 @@ Format: [Michael Nygard's ADR template](https://github.com/joelparkerhenderson/a
 | [003](./003-asg-over-auto-recovery.md) | Auto Scaling Group over EC2 Auto Recovery | Accepted |
 | [004](./004-cloudwatch-sns-over-third-party.md) | CloudWatch Alarms + SNS over Datadog / Prometheus | Accepted |
 | [005](./005-lambda-sns-over-ssm-run-command.md) | Lambda SNS subscriber over SSM Run Command | Accepted |
+| [006](./006-ci-cd-checkov.md) | GitHub Actions CI with Checkov over manual reviews | Accepted |
 
 ## Adding a new ADR
 

@@ -29,10 +29,10 @@
 # change on next instance replacement.
 
 resource "aws_launch_template" "app" {
-  name_prefix   = "${local.name_prefix}-app-"
-  description   = "AutoTier app: AL2023 + Flask via cloud-init, IAM-scoped, IMDSv2-only."
-  image_id      = data.aws_ami.al2023.id
-  instance_type = var.ec2_instance_type
+  name_prefix            = "${local.name_prefix}-app-"
+  description            = "AutoTier app: AL2023 + Flask via cloud-init, IAM-scoped, IMDSv2-only."
+  image_id               = data.aws_ami.al2023.id
+  instance_type          = var.ec2_instance_type
   update_default_version = true
 
   iam_instance_profile {
@@ -54,9 +54,9 @@ resource "aws_launch_template" "app" {
   block_device_mappings {
     device_name = "/dev/xvda"
     ebs {
-      volume_type = "gp3"
-      volume_size = 20
-      encrypted   = true
+      volume_type           = "gp3"
+      volume_size           = 20
+      encrypted             = true
       delete_on_termination = true
     }
   }
