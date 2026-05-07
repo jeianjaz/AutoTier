@@ -1,4 +1,4 @@
-.PHONY: help init fmt validate plan up down destroy checkov chaos
+.PHONY: help init fmt validate plan up down destroy checkov chaos status logs connect
 
 help:
 	@echo "AutoTier — Makefile targets"
@@ -11,6 +11,9 @@ help:
 	@echo "  make down      - terraform destroy (tear down ALL infra)"
 	@echo "  make checkov   - run Checkov security scan"
 	@echo "  make chaos     - run chaos test (measures MTTR)"
+	@echo "  make status    - show infrastructure health dashboard"
+	@echo "  make logs      - view Lambda remediation logs"
+	@echo "  make connect   - SSM into an ASG instance (no SSH)"
 
 init:
 	cd terraform && terraform init
@@ -38,3 +41,12 @@ checkov:
 
 chaos:
 	python3 scripts/chaos_test.py
+
+status:
+	python3 scripts/status.py
+
+logs:
+	python3 scripts/logs.py
+
+connect:
+	python3 scripts/connect.py
